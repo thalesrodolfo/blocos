@@ -9,7 +9,7 @@ import qualified Data.Configurator.Types as C
 import Database.PostgreSQL.Simple
 import qualified Data.Text as T
 import GHC.Generics
-
+import GHC.Int
 
 data DbConfig = DbConfig {
      dbName :: String,
@@ -33,12 +33,26 @@ makeDbConfig conf = do
                     <*> user
                     <*> pwd
 
+mkUser :: (Int, T.Text, T.Text, T.Text) -> User
+mkUser (id, username, password, email) = User id username password email
+
 findUsers :: Pool Connection -> IO [User]
 findUsers pool = do
   res <- withResource pool $ \conn ->
     query_ conn "SELECT * FROM users ORDER BY id DESC" :: IO [(Int, T.Text, T.Text, T.Text)]
-  return $ map (\(id, username, password, email) -> User id username password email) res
+  return $ map mkUser res
 
-findUser :: Int -> IO (Maybe User)
-findUser userId = undefined
+findUser :: Int64 -> Pool Connection -> IO (Maybe User)
+findUser userId pool = do
+  res <- withResource pool $ \conn ->
+    query conn "SELECT * FROM users WHERE id = ?" (Only userId) :: IO [(Int, T.Text, T.Text, T.Text)]
+  case length res of
+    0 -> return Nothing
+    _ -> return . Just $ mkUser . head $ res
+
+createUser :: User -> Pool Connection -> IO (Maybe User)
+createUser (User _ username password email) pool = do
+  res <- withResource pool $ \conn ->
+    execute conn "INSERT INTO users (username, password, email) values (?,?,?)" [username, password, email]
+  findUser res pool
 

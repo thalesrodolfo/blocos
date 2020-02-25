@@ -14,15 +14,14 @@ data User = User
 
 instance FromJSON User where
   parseJSON (Object v) = User <$>
-    v .: "id" <*>
+    v .:? "id" .!=0 <*>
     v .: "username" <*>
     v .: "password" <*>
     v .: "email"
 
 instance ToJSON User where
-  toJSON (User id username password email) =
+  toJSON (User id username _ email) =
     object ["id" .= id
            ,"username" .= username
-           ,"password" .= password
            ,"email" .= email
            ]

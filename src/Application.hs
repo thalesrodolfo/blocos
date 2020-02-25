@@ -13,12 +13,28 @@ import qualified Data.Configurator.Types as C
 import           Network.Wai (Application)
 
 import Control.Monad.IO.Class
+import Network.HTTP.Types
 
 app' :: Pool Connection -> S.ScottyM ()
 app' pool = do
   S.get "/api/v1/usuarios" $ do
     users <- liftIO $ findUsers pool
+    S.status status200
     S.json users
+
+  S.get "/api/v1/usuarios/:id" $ do
+    id <- S.param "id"
+    user <- liftIO $ findUser id pool
+    case user of
+      Nothing -> S.status status400
+      Just _ -> S.status status200 >> S.json user
+
+  S.post "/api/v1/usuarios" $ do
+    userJson <- S.jsonData
+    userResponse <- liftIO $ createUser userJson pool
+    case userResponse of
+      Nothing -> S.status status400
+      Just _ -> S.status status200 >> S.json userResponse
 
 runApp' :: Pool Connection -> IO Application
 runApp' pool = S.scottyApp (app' pool)

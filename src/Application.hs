@@ -36,6 +36,14 @@ app' pool = do
       Nothing -> S.status status400
       Just _ -> S.status status200 >> S.json userResponse
 
+  S.post "/api/v1/loginUser" $ do
+    username <- S.param "username"
+    password <- S.param "password"
+    loggedUser <- liftIO $ loginUser username password pool
+    case loggedUser of
+      Nothing -> S.status status400
+      Just _ -> S.status status200 >> S.json loggedUser
+
 runApp' :: Pool Connection -> IO Application
 runApp' pool = S.scottyApp (app' pool)
 

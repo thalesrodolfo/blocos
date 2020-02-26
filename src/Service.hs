@@ -10,9 +10,11 @@ import qualified Data.Configurator.Types as C
 import Crypto.BCrypt
 import Database.PostgreSQL.Simple
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Text.Encoding
 import GHC.Generics
 import GHC.Int
+import Data.Monoid ((<>))
 
 data DbConfig = DbConfig {
      dbName :: String,
@@ -53,14 +55,30 @@ findUser userId pool = do
     0 -> return Nothing
     _ -> return . Just $ mkUser . head $ res
 
+loginUser :: T.Text -> T.Text -> Pool Connection -> IO (Maybe User)
+loginUser loginUsername loginPassword pool = do
+  T.putStrLn $ "username: " <> loginUsername
+  T.putStrLn $ "password: " <> loginPassword
+  queryResponse <- withResource pool $ \conn ->
+    query conn "SELECT * FROM users WHERE username = ?" (Only loginUsername) :: IO [(Int, T.Text, T.Text, T.Text)]
+  print queryResponse
+  case length queryResponse of
+    0 -> return Nothing
+    _ -> do
+      user <- return $ mkUser . head $ queryResponse
+      let passwordFromDb = password user
+      if validatePassword (encodeUtf8 passwordFromDb) (encodeUtf8 loginPassword)
+        then return $ Just user
+        else return Nothing
+
 createUser :: User -> Pool Connection -> IO (Maybe User)
-createUser (User _ username password email) pool = do
-  encryptedPassword <- hashPasswordUsingPolicy slowerBcryptHashingPolicy (encodeUtf8 password)
-  case encryptedPassword of
-    Nothing -> return Nothing
-    Just pass -> do
-      let passAsText = decodeUtf8 pass
-      res <- withResource pool $ \conn ->
-        execute conn "INSERT INTO users (username, password, email) values (?,?,?)" [username, passAsText, email]
-      findUser res pool
+createUser (User _ username password email) pool =
+  withResource pool $ \conn -> do
+    encryptedPassword <- hashPasswordUsingPolicy slowerBcryptHashingPolicy (encodeUtf8 password)
+    case encryptedPassword of
+      Nothing -> return Nothing
+      Just pass -> do
+        let passAsText = decodeUtf8 pass
+        res <- execute conn "INSERT INTO users (username, password, email) values (?,?,?)" [username, passAsText, email]
+        findUser res pool
 

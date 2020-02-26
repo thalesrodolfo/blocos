@@ -18,8 +18,11 @@ library
   exposed-modules:     Application, Service, Types.User
   build-depends:       aeson
                      , base >= 4.7 && < 5
+                     , bcrypt
+                     , bytestring >= 0.10.8.2
                      , configurator
                      , hspec >= 2.7.1
+                     , http-types
                      , postgresql-simple
                      , resource-pool
                      , scotty
@@ -33,6 +36,7 @@ executable blocos-exe
   ghc-options:         -threaded -O2 -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , blocos
+                     , bytestring >= 0.10.8.2
                      , hspec >= 2.7.1
   default-language:    Haskell2010
 
@@ -43,6 +47,7 @@ test-suite blocos-test
   build-depends:       aeson
                      , base
                      , blocos
+                     , bytestring >= 0.10.8.2
                      , configurator
                      , hspec
                      , hspec >= 2.7.1

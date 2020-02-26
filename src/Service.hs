@@ -6,8 +6,11 @@ import Types.User
 import Data.Pool
 import qualified Data.Configurator as C
 import qualified Data.Configurator.Types as C
+
+import Crypto.BCrypt
 import Database.PostgreSQL.Simple
 import qualified Data.Text as T
+import Data.Text.Encoding
 import GHC.Generics
 import GHC.Int
 
@@ -52,7 +55,12 @@ findUser userId pool = do
 
 createUser :: User -> Pool Connection -> IO (Maybe User)
 createUser (User _ username password email) pool = do
-  res <- withResource pool $ \conn ->
-    execute conn "INSERT INTO users (username, password, email) values (?,?,?)" [username, password, email]
-  findUser res pool
+  encryptedPassword <- hashPasswordUsingPolicy slowerBcryptHashingPolicy (encodeUtf8 password)
+  case encryptedPassword of
+    Nothing -> return Nothing
+    Just pass -> do
+      let passAsText = decodeUtf8 pass
+      res <- withResource pool $ \conn ->
+        execute conn "INSERT INTO users (username, password, email) values (?,?,?)" [username, passAsText, email]
+      findUser res pool
 

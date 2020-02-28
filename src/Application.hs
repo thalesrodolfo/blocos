@@ -14,9 +14,11 @@ import           Network.Wai (Application)
 
 import Control.Monad.IO.Class
 import Network.HTTP.Types
+import Network.Wai.Middleware.Cors
 
 app' :: Pool Connection -> S.ScottyM ()
 app' pool = do
+  S.middleware simpleCors
   S.get "/api/v1/usuarios" $ do
     users <- liftIO $ findUsers pool
     S.status status200

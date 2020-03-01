@@ -7,7 +7,8 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
-import Json.Decode as D
+import Json.Decode as Decode exposing (..)
+import Json.Encode as Encode exposing (..)
 
 main =
   Browser.element
@@ -21,46 +22,56 @@ main =
 
 -- MODEL
 
+type alias LoginForm =
+    { username : String
+    , password : String
+    }
 
-type Model
-  = Failure
-  | Loading
-  | Success String
-  | SuccessUser (List User)
+type FormState
+    = ShowForm
+    | Failure
+    | Loading
+    | Success
 
+type alias Model
+  = { loginForm: LoginForm
+    , formState: FormState
+    }
 
 init : () -> (Model, Cmd Msg)
 init _ =
-  (Loading, getUsers)
+  (Model {username = "", password =  ""} ShowForm, Cmd.none)
 
 
 type Msg
-  = MorePlease
-  | GotGif (Result Http.Error String)
-  | GotUsers (Result Http.Error (List User))
+  = Logar
+  | SetUsername String
+  | SetPassword String
+  | GotValidation (Result Http.Error User)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    MorePlease ->
-      (Loading, getRandomCatGif)
+    Logar -> ({ model | formState = Loading } |> Debug.log "chamou o logar", validateUser model)
 
-    GotGif result ->
-      case result of
-        Ok url ->
-          (Success url, Cmd.none)
+    SetUsername newUsernameValue ->
+        let
+            oldForm = model.loginForm
+            newForm = { oldForm | username = newUsernameValue }
+        in
+            ({ model | loginForm = newForm} |> Debug.log "atualizou usuario", Cmd.none)
+    
+    SetPassword newPasswordValue ->
+        let
+            oldForm = model.loginForm
+            newForm = { oldForm | password = newPasswordValue }
+        in 
+            ({ model | loginForm = newForm} |> Debug.log "atualizou senha", Cmd.none)
 
-        Err _ ->
-          (Failure, Cmd.none)
-
-    GotUsers result ->
-      case result of
-        Ok users ->
-          (SuccessUser users , Cmd.none)
-
-        Err _ ->
-          (Failure, Cmd.none)
-
+    GotValidation result ->
+        case result of
+            Ok _ -> ({ model | formState = Success}, Cmd.none)
+            _    -> ({ model | formState = Failure }, Cmd.none)
 
 -- SUBSCRIPTIONS
 
@@ -69,78 +80,95 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.none
 
-
-
 -- VIEW
-
 
 view : Model -> Html Msg
 view model =
-  div []
-    [ h2 [] [ text "Random Cats" ]
-    , viewGif model
-    ]
+  div [ class "column col-2 col-mx-auto flex-centered" ]
+    [ viewGif model ]
 
 
 viewGif : Model -> Html Msg
 viewGif model =
-  case model of
+  case model.formState of
     Failure ->
-      div []
-        [ text "I could not load a random cat for some reason. "
-        , button [ onClick MorePlease ] [ text "Try Again!" ]
-        ]
+      div [ class "toast toast-error" ]
+        [ text "Erro: Não foi possível logar com o usuário informado. " ]
+
 
     Loading ->
-      text "Loading..."
+      div [ class "loading loading-lg"] []
 
-    Success url ->
-      div []
-        [ button [ onClick MorePlease, style "display" "block" ] [ text "More Please!" ]
-        , img [ src url ] []
+    Success ->
+      div [ class "toast toast-success" ]
+        [ text "Logado com sucesso" ]
+
+    ShowForm -> viewForm
+
+viewForm =
+    div [ style "padding-top" "100px" ]
+        [ div [ class "form-group" ]
+              [ label [ class "form-label"
+                      , for "password" ] [ text "Password"]
+              , input [ onInput SetUsername
+                      , class "form-input"
+                      , type_ "text"
+                      , id "username" ] []
+              ]
+        , div [ class "form-group" ]
+              [ label [ class "form-label"
+                      , for "password" ] [ text "Senha"]
+              , input [ onInput SetPassword
+                      , class "form-input"
+                      , type_ "password"
+                      , id "password"] []
+              ]
+        , div [ class "form-group" ]
+              [ button [ class "btn"
+                       , style "margin-top" "12px"
+                       , onClick Logar ] [ text "Logar" ]
+              ]
         ]
-
-    SuccessUser users ->
-      div [] (List.map mkUserView users)
-
 
 -- HTTP
 
+userEncoder : Model -> Encode.Value
+userEncoder model =
+    Encode.object
+        [ ("loginUsername", Encode.string model.loginForm.username)
+        , ("loginPassword", Encode.string model.loginForm.password)
+        ]    
 
-getRandomCatGif : Cmd Msg
-getRandomCatGif =
-  Http.get
-    { url = "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cat"
-    , expect = Http.expectJson GotGif gifDecoder
-    }
+validateUser : Model -> Cmd Msg
+validateUser model =
+    let
+        body = model |> userEncoder |> Http.jsonBody
+    in
+        Http.post { url = "http://localhost:8080/api/v1/loginUser"
+                  , body = body
+                  , expect = Http.expectJson GotValidation userDecoder}
+-- getRandomCatGif : Cmd Msg
+-- getRandomCatGif =
+--   Http.get
+--     { url = "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cat"
+--     , expect = Http.expectJson GotGif gifDecoder
+--     }
 
-getUsers : Cmd Msg
-getUsers =
-    Http.get
-        { url = "http://localhost:8080/api/v1/usuarios"
-        , expect = Http.expectJson GotUsers usersDecoder }
-
-
-gifDecoder : D.Decoder String
-gifDecoder =
-  D.field "data" (D.field "image_url" D.string)
-
-myJson = """[ { "id": 1, "username" : "thales", "email": "teste@teste" } ]"""
 
 type alias User =
     { id : Int
     , username : String
     , email: String }
 
-usersDecoder : D.Decoder (List User)
-usersDecoder = D.list userDecoder
+usersDecoder : Decoder (List User)
+usersDecoder = Decode.list userDecoder
 
-userDecoder : D.Decoder User
+userDecoder : Decoder User
 userDecoder =
-    D.map3 User
-        (D.field "id" D.int)
-        (D.field "username" D.string)
-        (D.field "email" D.string)
+    map3 User
+        (field "id" Decode.int)
+        (field "username" Decode.string)
+        (field "email" Decode.string)
 
 -- mkUserView : List User 
 mkUserView u =
